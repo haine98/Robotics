@@ -1,0 +1,61 @@
+try:
+    from cozmo_fsm import *
+except ImportError:
+    raise ImportError("Can't find the cozmo_fsm package. Check your search path.")
+
+import math
+from cozmo.util import *
+from cozmo.action import *
+
+class CubesCheck(StateNode):
+	def start(self, event=None):
+
+		if self.running: return
+		super().start(event)
+
+		if cube1.is_visible and cube2.is_visible and cube3.is_visible:
+			self.post_success()
+		else:
+			self.post_failure()
+
+class SendingCube(StateNode):
+	def start(self, event=None):
+		if self.running: return
+		super().start(event)
+
+		min = float("inf")
+		targ = None
+		cubes = [cube1, cube2, cube3]
+		for cube in cubes:
+			translation = robot.pose - cube.pose
+			dst = translation.position.x ** 2 + translation.position.y ** 2
+			if dst < min:
+				min = dst
+				targ = cube
+		self.post_data(targ)
+
+class ReceivingCube(StateNode):
+	def start(self, event=None):
+		super().start(event)
+		if isinstance(event, DataEvent):
+			targ = event.data
+			cubeX = targ.pose.position.x
+			cubeY = targ.pose.position.y
+			robotX = robot.pose.position.x
+			robotY = robot.pose.position.y
+			turn = (math.atan2(robotY-cubeY, robotX-cubeX)) * 180/math.pi
+			robot.turn_in_place(degrees(turn+180), is_absolute=True, in_parallel=True)
+		
+
+
+class FindClosestCube(StateMachineProgram):
+    $setup {
+	
+	checkCubes: CubesCheck()
+	sendCube: SendingCube()
+	receiveCube: ReceivingCube()
+
+	checkCubes =S=> sendCube =D=> receiveCube =T(1)=> checkCubes
+	checkCubes =F=> checkCubes
+
+    }
